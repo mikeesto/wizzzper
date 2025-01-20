@@ -17,6 +17,29 @@ app = Flask(__name__)
 # - Delete from file system
 
 
+def format_timestamp(number):
+    return f"{float(number):.2f}"
+
+
+def process_transcription_result(raw_result):
+    text = raw_result.get("text", "")
+    chunks = raw_result.get("chunks", [])
+
+    # Format chunks with consistent timestamp precision
+    formatted_chunks = []
+    for chunk in chunks:
+        formatted_chunk = {
+            "timestamp": [
+                format_timestamp(chunk["timestamp"][0]),
+                format_timestamp(chunk["timestamp"][1]),
+            ],
+            "text": chunk["text"],
+        }
+        formatted_chunks.append(formatted_chunk)
+
+    return {"text": text, "chunks": formatted_chunks}
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -25,6 +48,7 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
+        # TODO: Return a template
         return "No file uploaded"
 
     file = request.files["file"]
@@ -60,7 +84,7 @@ def upload_file():
     # print(result)
 
     # Sample response
-    result = {
+    sample_result = {
         "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
         "chunks": [
             {
@@ -70,6 +94,8 @@ def upload_file():
         ],
     }
 
+    # Format the timestamps before sending to template
+    result = process_transcription_result(sample_result)
     return render_template("result.html", result=result)
 
 
@@ -80,11 +106,13 @@ def serve_file(filename):
 
 @app.route("/download", methods=["POST"])
 def download():
-    data = request.json
+    data = request.json["transcript"]
 
-    formatted_transcript = data.map(
-        lambda chunk: f"{chunk["timestamp"]}\n{chunk["text"]}"
-    ).join("\n\n")
+    formatted_chunks = [
+        f"{chunk['timestamp'][0]} - {chunk['timestamp'][1]}\n{chunk['text']}"
+        for chunk in data
+    ]
+    formatted_transcript = "\n\n".join(formatted_chunks)
 
     response = make_response(formatted_transcript)
     response.headers["Content-Disposition"] = "attachment; filename=transcript.txt"
