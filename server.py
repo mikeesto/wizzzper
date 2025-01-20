@@ -47,19 +47,8 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    if "file" not in request.files:
-        # TODO: Return a template
-        return "No file uploaded"
-
     file = request.files["file"]
-
-    # Check if the file is an audio file
-    allowed_extensions = ["mp3", "ogg", "wav", "m4a", "aac"]
-
     file_extension = file.filename.split(".")[-1]
-
-    if not file.filename.split(".")[-1] in allowed_extensions:
-        return "Invalid file type. Supported file types: mp3, ogg, wav, m4a, aac"
 
     # Save the file into /static/upload with a unique filename
     unique_filename = f"{int(time.time())}_{random.randint(1000,9999)}.{file_extension}"
