@@ -7,14 +7,9 @@ import time
 
 load_dotenv()
 
+FLY_URL = os.getenv("FLY_URL")
+
 app = Flask(__name__)
-
-# Wizper PLAN
-
-# - User uploads, make it statically available
-# - Generate URL to send to fal
-# - Share URL with fal for transcription
-# - Delete from file system
 
 
 def format_timestamp(number):
@@ -54,7 +49,10 @@ def upload_file():
     unique_filename = f"{int(time.time())}_{random.randint(1000,9999)}.{file_extension}"
     file.save(os.path.join("static/uploads", unique_filename))
 
-    test_file = "https://github.com/mikeesto/wizzzper/raw/refs/heads/master/static/uploads/test.mp3"
+    # Generate the URL to send to fal
+    file_url = f"https://{FLY_URL}/static/uploads/{unique_filename}"
+
+    # test_file = "https://github.com/mikeesto/wizzzper/raw/refs/heads/master/static/uploads/test.mp3"
 
     def on_queue_update(update):
         if update and hasattr(update, "logs") and update.logs:
@@ -62,29 +60,27 @@ def upload_file():
                 print(log["message"])
 
     # Send to fal_ai API
-    # result = fal_client.subscribe(
-    #     "fal-ai/wizper",
-    #     arguments={
-    #         "audio_url": test_file,
-    #     },
-    #     on_queue_update=on_queue_update,
-    # )
-
-    # print(result)
+    response = fal_client.subscribe(
+        "fal-ai/wizper",
+        arguments={
+            "audio_url": file_url,
+        },
+        on_queue_update=on_queue_update,
+    )
 
     # Sample response
-    sample_result = {
-        "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
-        "chunks": [
-            {
-                "timestamp": [0.2, 29.04],
-                "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
-            }
-        ],
-    }
+    # sample_result = {
+    #     "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
+    #     "chunks": [
+    #         {
+    #             "timestamp": [0.2, 29.04],
+    #             "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
+    #         }
+    #     ],
+    # }
 
     # Format the timestamps before sending to template
-    result = process_transcription_result(sample_result)
+    result = process_transcription_result(response)
     return render_template("result.html", result=result)
 
 
