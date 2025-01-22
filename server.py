@@ -22,7 +22,9 @@ app = Flask(__name__)
 
 
 def format_timestamp(number):
-    return f"{float(number):.2f}"
+    minutes = int(float(number)) // 60
+    seconds = int(float(number)) % 60
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def process_transcription_result(raw_result):
