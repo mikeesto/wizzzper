@@ -1,9 +1,18 @@
-from flask import Flask, request, send_from_directory, render_template, make_response
+from flask import (
+    Flask,
+    request,
+    send_from_directory,
+    render_template,
+    make_response,
+    jsonify,
+)
 import os
 from dotenv import load_dotenv
 import fal_client
 import random
 import time
+from threading import Thread
+import uuid
 
 load_dotenv()
 
@@ -40,6 +49,28 @@ def index():
     return render_template("index.html")
 
 
+# Store jobs in memory, for now
+jobs = {}
+
+
+def process_in_background(job_id, file_url):
+    def on_queue_update(update):
+        if update and hasattr(update, "logs") and update.logs:
+            for log in update.logs:
+                print(log["message"])
+
+    try:
+        response = fal_client.subscribe(
+            "fal-ai/wizper",
+            arguments={"audio_url": file_url},
+            on_queue_update=on_queue_update,
+        )
+        result = process_transcription_result(response)
+        jobs[job_id] = {"status": "completed", "result": result}
+    except Exception as e:
+        jobs[job_id] = {"status": "failed", "error": str(e)}
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     file = request.files["file"]
@@ -54,21 +85,7 @@ def upload_file():
 
     # test_file = "https://github.com/mikeesto/wizzzper/raw/refs/heads/master/static/uploads/test.mp3"
 
-    def on_queue_update(update):
-        if update and hasattr(update, "logs") and update.logs:
-            for log in update.logs:
-                print(log["message"])
-
-    # Send to fal_ai API
-    response = fal_client.subscribe(
-        "fal-ai/wizper",
-        arguments={
-            "audio_url": file_url,
-        },
-        on_queue_update=on_queue_update,
-    )
-
-    # Sample response
+    # Sample response from API
     # sample_result = {
     #     "text": "I have the pleasure to present to you Dr. Martin Luther King, Jr. I am happy to join with you today in what will go down in history as the greatest demonstration for freedom in the history of our nation.",
     #     "chunks": [
@@ -79,9 +96,20 @@ def upload_file():
     #     ],
     # }
 
-    # Format the timestamps before sending to template
-    result = process_transcription_result(response)
-    return render_template("result.html", result=result)
+    # Create job and start processing in background
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "processing"}
+    Thread(target=process_in_background, args=(job_id, file_url)).start()
+
+    return jsonify({"job_id": job_id})
+
+
+@app.route("/status/<job_id>")
+def get_status(job_id):
+    job = jobs.get(job_id, {"status": "not_found"})
+    if job["status"] == "completed":
+        return jsonify({"status": "completed", "result": job["result"]})
+    return jsonify(job)
 
 
 @app.route("/files/<filename>")

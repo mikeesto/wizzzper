@@ -7,123 +7,215 @@
       href="{{ url_for('static', filename='css/styles.css') }}"
     />
     <script src="https://cdn.twind.style" crossorigin></script>
+    <script src="https://unpkg.com/preact@10.19.3/dist/preact.min.js"></script>
+    <script src="https://unpkg.com/preact@10.19.3/hooks/dist/hooks.umd.js"></script>
+    <script src="https://unpkg.com/htm@3.1.1/dist/htm.js"></script>
   </head>
   <body>
-    <div class="min-h-screen bg-gradient-to-b from-purple-50 to-white">
-      <div class="container mx-auto px-4 pt-20 pb-16 text-center">
-        <h1 class="text-5xl font-bold text-purple-900 mb-4">Wizzzper</h1>
-        <h2 class="text-2xl text-gray-600 mb-12 max-w-2xl mx-auto">
-          Transform your audio into text in seconds.
-        </h2>
+    <div id="app"></div>
+    <script type="module">
+      const html = htm.bind(preact.h);
+      const { useState, useEffect } = preactHooks;
 
-        <!-- Upload Section -->
-        <div
-          class="max-w-xl mx-auto bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-shadow duration-300"
-        >
-          <div class="space-y-4">
-            <div
-              class="flex items-center justify-center w-16 h-16 mx-auto bg-purple-100 rounded-full"
-            >
-              <svg
-                class="w-8 h-8 text-purple-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
+      const UploadForm = ({ onUploadComplete }) => {
+        const [selectedFile, setSelectedFile] = useState(null);
+        const [isUploading, setIsUploading] = useState(false);
+        const [uploadError, setUploadError] = useState(null);
+        const allowedExtensions = ["mp3", "ogg", "wav", "m4a", "aac"];
+
+        const isValidFileType = (file) => {
+          const extension = file.name.split(".").pop().toLowerCase();
+          return allowedExtensions.includes(extension);
+        };
+
+        const handleFileChange = (e) => {
+          const file = e.target.files[0];
+          if (file && isValidFileType(file)) {
+            setSelectedFile(file);
+            setUploadError(null);
+          } else if (file) {
+            setUploadError(
+              `Invalid file type. Please upload ${allowedExtensions.join(
+                ", "
+              )} files only.`
+            );
+            setSelectedFile(null);
+          }
+        };
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          if (!selectedFile) return;
+
+          setIsUploading(true);
+          const formData = new FormData();
+          formData.append("file", selectedFile);
+
+          try {
+            const uploadResponse = await fetch("/upload", {
+              method: "POST",
+              body: formData,
+            });
+            const { job_id } = await uploadResponse.json();
+
+            // Start polling for results
+            const pollInterval = setInterval(async () => {
+              const statusResponse = await fetch(`/status/${job_id}`);
+              const result = await statusResponse.json();
+
+              if (result.status === "completed") {
+                clearInterval(pollInterval);
+                onUploadComplete(result.result);
+                setIsUploading(false);
+              } else if (result.status === "failed") {
+                clearInterval(pollInterval);
+                setUploadError(result.error);
+                setIsUploading(false);
+              }
+            }, 2000);
+          } catch (error) {
+            setUploadError("Upload failed. Please try again.");
+            setIsUploading(false);
+          }
+        };
+
+        return html`
+          <div
+            class="max-w-xl mx-auto bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-shadow duration-300"
+          >
+            <div class="space-y-4">
+              <div
+                class="flex items-center justify-center w-16 h-16 mx-auto bg-purple-100 rounded-full"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                ></path>
-              </svg>
-            </div>
-
-            <form
-              method="post"
-              action="/upload"
-              enctype="multipart/form-data"
-              class="space-y-6"
-            >
-              <div class="relative">
-                <input
-                  type="file"
-                  name="file"
-                  accept="audio/*"
-                  class="hidden"
-                  id="file-upload"
-                />
-                <label
-                  for="file-upload"
-                  class="flex flex-col items-center justify-center w-full h-32 px-4 transition bg-white border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:border-purple-500 hover:bg-purple-50"
+                <svg
+                  class="w-8 h-8 text-purple-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <div
-                    class="flex flex-col items-center justify-center pt-5 pb-6"
-                  >
-                    <p class="mb-2 text-sm text-gray-500">
-                      <span class="font-semibold">Click to upload</span> or drag
-                      and drop
-                    </p>
-                    <p class="text-xs text-gray-500">MP3, WAV, M4A, OGG, AAC</p>
-                  </div>
-                </label>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  ></path>
+                </svg>
               </div>
 
-              <button
-                type="submit"
-                id="submit-button"
-                disabled
-                class="w-full px-6 py-3 text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Start Transcription
-              </button>
-            </form>
+              <form onSubmit=${handleSubmit} class="space-y-6">
+                <div class="relative">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    class="hidden"
+                    id="file-upload"
+                    onChange=${handleFileChange}
+                  />
+                  <label
+                    for="file-upload"
+                    class="flex flex-col items-center justify-center w-full h-32 px-4 transition bg-white border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:border-purple-500 hover:bg-purple-50"
+                  >
+                    <div
+                      class="flex flex-col items-center justify-center pt-5 pb-6"
+                    >
+                      <p class="mb-2 text-sm text-gray-500">
+                        ${selectedFile
+                          ? html`Selected file: ${" "}
+                              <span class="font-semibold"
+                                >${selectedFile.name}</span
+                              >`
+                          : html`<span class="font-semibold"
+                                >Click to upload</span
+                              >
+                              ${" "}or drag and drop`}
+                      </p>
+                      ${uploadError &&
+                      html`<p class="text-red-500 text-xs">${uploadError}</p>`}
+                      <p class="text-xs text-gray-500">
+                        MP3, WAV, M4A, OGG, AAC
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled=${!selectedFile || isUploading}
+                  class="w-full px-6 py-3 text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ${isUploading ? "Processing..." : "Start Transcription"}
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        `;
+      };
+
+      const TranscriptView = ({ result }) => {
+        const handleDownload = async () => {
+          const response = await fetch("/download", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ transcript: result.chunks }),
+          });
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.setAttribute("download", "transcript.txt");
+          document.body.appendChild(link);
+          link.click();
+          link.parentNode.removeChild(link);
+        };
+
+        return html`
+          <div>
+            <button
+              onClick=${handleDownload}
+              class="mb-4 px-6 py-3 text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors duration-200"
+            >
+              Download Transcript
+            </button>
+
+            ${result.chunks.map(
+              (chunk) => html`
+                <div
+                  key=${chunk.timestamp[0]}
+                  class="bg-white shadow-md rounded-lg p-6 mb-4 max-w-2xl mx-auto text-left"
+                >
+                  <h3 class="text-sm text-gray-500 mb-2">
+                    ${chunk.timestamp[0]} - ${chunk.timestamp[1]}
+                  </h3>
+                  <p class="text-gray-800">${chunk.text}</p>
+                </div>
+              `
+            )}
+          </div>
+        `;
+      };
+
+      const App = () => {
+        const [result, setResult] = useState(null);
+
+        return html`
+          <div class="min-h-screen bg-gradient-to-b from-purple-50 to-white">
+            <div class="container mx-auto px-4 pt-20 pb-16 text-center">
+              <h1 class="text-5xl font-bold text-purple-900 mb-4">Wizzzper</h1>
+              <h2 class="text-2xl text-gray-600 mb-12 max-w-2xl mx-auto">
+                Transform your audio into text in seconds.
+              </h2>
+
+              ${result
+                ? html`<${TranscriptView} result=${result} />`
+                : html`<${UploadForm} onUploadComplete=${setResult} />`}
+            </div>
+          </div>
+        `;
+      };
+
+      preact.render(html`<${App} />`, document.getElementById("app"));
+    </script>
   </body>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const fileInput = document.getElementById("file-upload");
-      const fileLabel = document.querySelector('[for="file-upload"]');
-      const uploadText = fileLabel.querySelector("p");
-      const submitButton = document.getElementById("submit-button");
-      const allowedExtensions = ["mp3", "ogg", "wav", "m4a", "aac"];
-
-      function isValidFileType(file) {
-        const extension = file.name.split(".").pop().toLowerCase();
-        return allowedExtensions.includes(extension);
-      }
-
-      fileInput.addEventListener("change", function (e) {
-        if (this.files.length > 0) {
-          const file = this.files[0];
-
-          if (isValidFileType(file)) {
-            fileLabel.classList.add("border-purple-500", "bg-purple-50");
-            uploadText.innerHTML = `Selected file: <span class="font-semibold">${file.name}</span>`;
-            submitButton.disabled = false;
-          } else {
-            uploadText.innerHTML = `Invalid file type. Please upload ${allowedExtensions.join(
-              ", "
-            )} files only.`;
-            this.value = ""; // Clear the file input
-            submitButton.disabled = true;
-
-            // Reset the error styling after 3 seconds
-            setTimeout(() => {
-              uploadText.innerHTML =
-                '<span class="font-semibold">Click to upload</span> or drag and drop';
-            }, 3000);
-          }
-        } else {
-          uploadText.innerHTML =
-            '<span class="font-semibold">Click to upload</span> or drag and drop';
-          submitButton.disabled = true;
-        }
-      });
-    });
-  </script>
 </html>
